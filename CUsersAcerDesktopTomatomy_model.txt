@@ -1,0 +1,5 @@
+C:\Users\Acer\Desktop\Tomato\my_model
+
+create exe file - 
+
+pyinstaller --onefile --noconsole --add-data "train;train" --add-data "my_model.pt;." --hidden-import ultralytics --hidden-import tkinter --hidden-import PIL --hidden-import cv2 --hidden-import numpy main.py
