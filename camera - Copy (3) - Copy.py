@@ -39,9 +39,7 @@ def start_detection():
     if running or arduino is None:
         return  # Avoid multiple starts or if Arduino is not connected
     running = True
-    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # Open webcam
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1080)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)  # Open webcam
     threading.Thread(target=run_detection, daemon=True).start()  # Run in background
 
 # Function to stop detection
@@ -67,7 +65,6 @@ def run_detection():
         results = model(frame, conf=0.2)  # Adjust confidence threshold if needed
 
         detected = False  # Flag for object detection
-        detected_class = None  # Store detected class
 
         # Process results
         for result in results:
@@ -76,10 +73,7 @@ def run_detection():
                 x1, y1, x2, y2 = map(int, box.xyxy[0])  # Bounding box coordinates
                 class_id = int(box.cls[0])  # Class ID
                 confidence = float(box.conf[0])  # Confidence score
-                class_name = model.names[class_id]  # Get class name
-                label = f"{class_name}: {confidence:.2f}"
-
-                detected_class = class_name  # Store detected class
+                label = f"{model.names[class_id]}: {confidence:.2f}"
 
                 # Get color for class
                 color = colors.get(class_id, (0, 255, 0))
@@ -90,19 +84,15 @@ def run_detection():
 
                 print(f"Detected: {label}")
 
-        # Send corresponding value to Arduino based on the detected class
+        # Send signal to Arduino
         if detected:
-            arduino_value = get_arduino_signal(detected_class)
-            arduino.write(arduino_value.encode())  # Send encoded bytes to Arduino
-            print(f"Sent to Arduino: {arduino_value}")
+            arduino.write(b'G')  # Turn ON LED
         else:
             arduino.write(b'0')  # Turn OFF LED
-            print("Sent to Arduino: 0")
 
-        # Convert frame for Tkinter display
+        # Convert frame for Tkinter
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         img = Image.fromarray(frame)
-        img = img.resize((680, 420), Image.LANCZOS)  # Resize for display
         imgtk = ImageTk.PhotoImage(image=img)
         camera_label.imgtk = imgtk
         camera_label.configure(image=imgtk)
@@ -111,19 +101,6 @@ def run_detection():
             break
 
     cap.release()
-
-# Function to return specific signals based on the detected class
-def get_arduino_signal(class_name):
-    signals = {
-        "weed": "P",
-        "tomato water required": "C",
-        "tomato good health": "D",
-        
-    }
-    return signals.get(class_name, "X")  # Default to 'X' if class is unknown
-
-        # Convert frame for Tkinter
-
 
 # GUI Interface
 root = tk.Tk()

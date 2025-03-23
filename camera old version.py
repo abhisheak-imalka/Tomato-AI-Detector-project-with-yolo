@@ -9,13 +9,17 @@ import tkinter as tk
 from tkinter import Label, Entry, Button
 from PIL import Image, ImageTk
 
-# Load the YOLO model
-model = YOLO("my_model.pt")  # Ensure the correct path to the model
+# Load YOLO Model
+model = YOLO("my_model.pt")  # Make sure the model file exists in the same directory
 
-# Global variables
+# Global Variables
 arduino = None  # Serial connection object
 running = False  # Flag to start/stop detection
 cap = None
+
+# Set camera resolution
+CAMERA_WIDTH = 600
+CAMERA_HEIGHT = 400
 
 # Generate random colors for each class
 num_classes = len(model.names)
@@ -24,7 +28,7 @@ colors = {i: [random.randint(0, 255) for _ in range(3)] for i in range(num_class
 # Function to connect to Arduino
 def connect_arduino():
     global arduino
-    com_port = com_entry.get()  # Get user input COM port
+    com_port = com_entry.get().strip()  # Get user input COM port
     try:
         arduino = serial.Serial(com_port, 9600, timeout=1)
         time.sleep(2)  # Allow time for connection
@@ -40,8 +44,8 @@ def start_detection():
         return  # Avoid multiple starts or if Arduino is not connected
     running = True
     cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # Open webcam
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1080)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
     threading.Thread(target=run_detection, daemon=True).start()  # Run in background
 
 # Function to stop detection
@@ -52,7 +56,7 @@ def stop_detection():
         cap.release()
         cap = None
     if arduino:
-        arduino.write(b'0')  # Send signal to turn off LEDs
+        arduino.write(b'0')  # Turn off LED
     print("Detection Stopped")
 
 # YOLO detection function
@@ -67,7 +71,6 @@ def run_detection():
         results = model(frame, conf=0.2)  # Adjust confidence threshold if needed
 
         detected = False  # Flag for object detection
-        detected_class = None  # Store detected class
 
         # Process results
         for result in results:
@@ -76,10 +79,7 @@ def run_detection():
                 x1, y1, x2, y2 = map(int, box.xyxy[0])  # Bounding box coordinates
                 class_id = int(box.cls[0])  # Class ID
                 confidence = float(box.conf[0])  # Confidence score
-                class_name = model.names[class_id]  # Get class name
-                label = f"{class_name}: {confidence:.2f}"
-
-                detected_class = class_name  # Store detected class
+                label = f"{model.names[class_id]}: {confidence:.2f}"
 
                 # Get color for class
                 color = colors.get(class_id, (0, 255, 0))
@@ -90,19 +90,16 @@ def run_detection():
 
                 print(f"Detected: {label}")
 
-        # Send corresponding value to Arduino based on the detected class
+        # Send signal to Arduino
         if detected:
-            arduino_value = get_arduino_signal(detected_class)
-            arduino.write(arduino_value.encode())  # Send encoded bytes to Arduino
-            print(f"Sent to Arduino: {arduino_value}")
+            arduino.write(b'G')  # Turn ON LED
         else:
             arduino.write(b'0')  # Turn OFF LED
-            print("Sent to Arduino: 0")
 
-        # Convert frame for Tkinter display
+        # Convert frame for Tkinter
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         img = Image.fromarray(frame)
-        img = img.resize((680, 420), Image.LANCZOS)  # Resize for display
+        img = img.resize((CAMERA_WIDTH, CAMERA_HEIGHT), Image.LANCZOS)  # Resize for display
         imgtk = ImageTk.PhotoImage(image=img)
         camera_label.imgtk = imgtk
         camera_label.configure(image=imgtk)
@@ -112,47 +109,43 @@ def run_detection():
 
     cap.release()
 
-# Function to return specific signals based on the detected class
-def get_arduino_signal(class_name):
-    signals = {
-        "weed": "P",
-        "tomato water required": "C",
-        "tomato good health": "D",
-        
-    }
-    return signals.get(class_name, "X")  # Default to 'X' if class is unknown
-
-        # Convert frame for Tkinter
-
-
 # GUI Interface
 root = tk.Tk()
 root.title("YOLO Object Detection")
-root.geometry("800x600")
+root.geometry(f"{CAMERA_WIDTH + 200}x{CAMERA_HEIGHT + 150}")  # Increased window size
+
+# Main frame to hold widgets
+main_frame = tk.Frame(root)
+main_frame.grid(row=0, column=0, padx=20, pady=10)
 
 # COM Port Input
-com_label = Label(root, text="Enter COM Port:")
-com_label.pack()
+com_label = Label(main_frame, text="Enter COM Port:")
+com_label.grid(row=0, column=0, pady=5, sticky="w")
 
-com_entry = Entry(root)
-com_entry.pack()
+com_entry = Entry(main_frame)
+com_entry.grid(row=0, column=1, pady=5)
 
-connect_button = Button(root, text="Connect", command=connect_arduino, bg="blue", fg="white", font=("Arial", 12))
-connect_button.pack(pady=5)
+connect_button = Button(main_frame, text="Connect", command=connect_arduino, bg="blue", fg="white", font=("Arial", 12))
+connect_button.grid(row=0, column=2, padx=10)
 
-status_label = Label(root, text="Not Connected", fg="red")
-status_label.pack()
+status_label = Label(main_frame, text="Not Connected", fg="red")
+status_label.grid(row=1, column=0, columnspan=3, pady=5)
 
-# Camera feed label
-camera_label = Label(root)
-camera_label.pack()
+# Camera feed label with increased size
+camera_label = Label(root, width=CAMERA_WIDTH, height=CAMERA_HEIGHT, bg="black")
+camera_label.grid(row=1, column=0, pady=10)
 
-# Buttons
-start_button = Button(root, text="Start Detection", command=start_detection, bg="green", fg="white", font=("Arial", 14), state="disabled")
-start_button.pack(pady=10)
+# Button frame to ensure visibility
+button_frame = tk.Frame(root)
+button_frame.grid(row=2, column=0, pady=10)
 
-stop_button = Button(root, text="Stop Detection", command=stop_detection, bg="red", fg="white", font=("Arial", 14))
-stop_button.pack(pady=10)
+# Start Detection Button
+start_button = Button(button_frame, text="Start Detection", command=start_detection, bg="green", fg="white", font=("Arial", 14), state="disabled")
+start_button.grid(row=0, column=0, padx=10)
+
+# Stop Detection Button
+stop_button = Button(button_frame, text="Stop Detection", command=stop_detection, bg="red", fg="white", font=("Arial", 14))
+stop_button.grid(row=0, column=1, padx=10)
 
 # Run the GUI
 root.mainloop()

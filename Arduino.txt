@@ -1,0 +1,20 @@
+#define LED_PIN 13  // Define the pin for the LED (Change if using a different pin)
+
+void setup() {
+    pinMode(LED_PIN, OUTPUT);  // Set LED pin as output
+    Serial.begin(9600);  // Start serial communication at 9600 baud rate
+}
+
+void loop() {
+    if (Serial.available() > 0) {  // Check if data is available from Python
+        char receivedChar = Serial.read();  // Read the incoming character
+        
+        if (receivedChar == 'G' || receivedChar == 'R' || receivedChar == 'Y') {
+             
+            digitalWrite(LED_PIN, HIGH);  // Turn ON LED
+        } else if (receivedChar == '0') {
+             
+            digitalWrite(LED_PIN, LOW);  // Turn OFF LED
+        }
+    }
+}
